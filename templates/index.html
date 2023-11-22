@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dark_theme.css') }}">
+    <title>Dashboard</title>
+</head>
+<body>
+<nav>
+    <div class="navbar">
+        <a href="/">Dashboard</a>
+
+        <div id="account_nav_div" class="flex-row">
+            <a id="login_link" href="/login">Login</a>
+            <a id="register_link" href="/register">Register</a>
+        </div>
+    </div>
+</nav>
+<h1>Dashboard</h1>
+
+<div class="flex-row">
+
+    <div class="flex-col">
+        <h1>Expenses</h1>
+
+        <table id="expensesTable">
+            <thead>
+            <tr>
+                <th>Title</th>
+                <th>Description</th>
+                <th>Balance</th>
+                <th>Category</th>
+                <th>Date Created</th>
+                <th>Edit</th>
+                <th>Delete</th>
+            </tr>
+            </thead>
+            <tbody id="expensesBody">
+            <!-- Expense data will be populated here -->
+            </tbody>
+        </table>
+    </div>
+
+
+    <div class="flex-col one-third-width">
+
+        <div class="flex-col">
+            <h1>Add Expense</h1>
+            <form action="/add_expense" method="POST">
+                <label for="expense_title">Title:</label><br>
+                <input type="text" id="expense_title" name="expense_title" required><br><br>
+
+                <label for="expense_description">Description:</label><br>
+                <textarea id="expense_description" name="expense_description" required></textarea><br><br>
+
+                <label for="expense_balance">Balance:</label><br>
+                <input type="text" id="expense_balance" name="expense_balance" value="" data-type="currency"
+                       required><br><br>
+
+                <label for="category_id">Category:</label><br>
+                <select id="category_id" name="category_id" required>
+                    <!-- Populate options with existing categories -->
+                    <option value="">Select Category</option>
+                    <!-- Add more options dynamically based on existing categories -->
+                </select><br><br>
+
+                <input type="submit" value="Add Expense">
+            </form>
+        </div>
+
+
+        <div class="flex-col">
+            <h1>Create Category</h1>
+            <form action="/create_category" method="POST">
+                <label for="category_name">Category Name:</label><br>
+                <input type="text" id="category_name" name="category_name" required><br><br>
+
+                <label for="category_description">Description:</label><br>
+                <textarea id="category_description" name="category_description" required></textarea><br><br>
+
+                <input type="submit" value="Create Category">
+            </form>
+        </div>
+
+    </div>
+
+</div>
+<script>
+    function formatNumber(n) {
+        return n.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    function formatCurrency(input, blur) {
+        let input_val = input.value;
+
+        if (input_val === "") return;
+
+        const original_len = input_val.length;
+        let caret_pos = input.selectionStart;
+
+        if (input_val.indexOf(".") >= 0) {
+            const decimal_pos = input_val.indexOf(".");
+            let left_side = input_val.substring(0, decimal_pos);
+            let right_side = input_val.substring(decimal_pos);
+
+            left_side = formatNumber(left_side);
+            right_side = formatNumber(right_side);
+
+            if (blur === "blur") {
+                right_side += "00";
+            }
+
+            right_side = right_side.substring(0, 2);
+            input_val = "$" + left_side + "." + right_side;
+        } else {
+            input_val = formatNumber(input_val);
+            input_val = "$" + input_val;
+
+            if (blur === "blur") {
+                input_val += ".00";
+            }
+        }
+
+        input.value = input_val;
+        const updated_len = input_val.length;
+        caret_pos = updated_len - original_len + caret_pos;
+        input.setSelectionRange(caret_pos, caret_pos);
+    }
+
+    window.onload = function () {
+        const currencyInputs = document.querySelectorAll("input[data-type='currency']");
+
+        currencyInputs.forEach(function (input) {
+            input.addEventListener('keyup', function () {
+                formatCurrency(this);
+            });
+
+            input.addEventListener('blur', function () {
+                formatCurrency(this, "blur");
+            });
+        });
+    };
+    // Fetch categories and populate dropdown
+    var CATEGORIES = [];
+    fetch('/categories')
+        .then(response => response.json())
+        .then(data => {
+            const categories = data.categories;
+            const categoryDropdown = document.getElementById('category_id');
+            CATEGORIES = categories;
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category.id;
+                option.textContent = category.name;
+                categoryDropdown.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error:', error));
+
+    // Fetch expenses and populate table
+    fetch('/expenses')
+        .then(response => response.json())
+        .then(data => {
+            const expenses = data.expenses;
+            const tableBody = document.getElementById('expensesBody');
+
+            expenses.forEach(expense => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${expense.title}</td>
+                    <td>${expense.description}</td>
+                    <td>${expense.balance}</td>
+                    <td>${expense.category}</td>
+                    <td>${expense.date_created}</td>
+                    <td><button onclick="editExpense(${expense.id})">Edit</button></td>
+                    <td><button onclick="deleteExpense(${expense.id})">Delete</button></td>
+                `;
+                row.id = `expenseRow${expense.id}`;
+                tableBody.appendChild(row);
+            });
+        })
+        .catch(error => console.error('Error:', error));
+
+    // Function to delete an expense
+    function deleteExpense(expenseId) {
+        fetch(`/expenses/${expenseId}`, {
+            method: 'DELETE'
+        })
+            .then(response => {
+                if (response.ok) {
+                    // Remove the expense row from the table on successful deletion
+                    const rowToRemove = document.getElementById(`expenseRow${expenseId}`);
+                    rowToRemove.remove();
+                } else {
+                    console.error('Error:', response.statusText);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    // Function to update an expense (this is just a template, you need to implement it)
+    function editExpense(expenseId) {
+        const rowToEdit = document.getElementById(`expenseRow${expenseId}`);
+        const cells = rowToEdit.getElementsByTagName('td');
+
+        const inputTypes = ['text', '', 'text', ''];
+        const inputElem = ['input', 'textarea', 'input', 'select']
+
+        for (let i = 0; i < cells.length - 3; i++) {
+            const cell = cells[i];
+            const currentValue = cell.textContent;
+
+            const input = document.createElement(inputElem[i]); // Use the respective input types
+
+            if (inputElem[i] === 'select') {
+                // For the select dropdown, populate options dynamically based on existing categories
+                input.id = 'category_id';
+                input.name = 'category_id';
+                input.required = true;
+
+                // Example: replace this with actual categories fetched from the backend
+                const categories = CATEGORIES;
+                categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category.id;
+                    option.textContent = category.name;
+                    input.appendChild(option);
+                });
+            }
+            else if(inputElem[i] === 'input'){
+                input.type = inputTypes[i];
+                input.name = `field_${i}`;
+                input.value = currentValue;
+                input.required = true;
+            }
+            else {
+                input.type = inputTypes[i];
+                input.name = `field_${i}`;
+                input.value = currentValue;
+                input.required = true;
+            }
+
+            cell.innerHTML = '';
+            cell.appendChild(input);
+        }
+
+        // Hide the Edit and Delete buttons
+        const editButton = rowToEdit.querySelector('td:nth-last-child(2) button');
+        const deleteButton = rowToEdit.querySelector('td:last-child button');
+
+        editButton.style.display = 'none';
+        deleteButton.style.display = 'none';
+
+        const submitBtn = document.createElement('button');
+        submitBtn.innerText = "Update";
+        submitBtn.onclick = function () {
+            updateExpense(expenseId); // Call the updateExpense function with the expenseId
+        };
+        cells[cells.length - 2].appendChild(submitBtn);
+    }
+
+    function updateExpense(expenseId) {
+        const rowToUpdate = document.getElementById(`expenseRow${expenseId}`);
+        const cells = rowToUpdate.getElementsByTagName('td');
+
+        const updatedData = {}; // Collect updated data in an object
+
+        for (let i = 0; i < cells.length - 2; i++) {
+            const cell = cells[i];
+            const inputValue = cell.querySelector('td').children;
+            console.log(inputValue)
+            updatedData[`field_${i}`] = inputValue; // Replace with your field names
+        }
+        console.log(updatedData);
+
+        // Make a fetch request to the backend API to update the expense
+        fetch(`/expenses/${expenseId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updatedData)
+        })
+            .then(response => {
+                if (response.ok) {
+                    // Update the UI or perform any necessary actions on successful update
+                    console.log('Expense updated successfully');
+                } else {
+                    console.error('Error:', response.statusText);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+</script>
+</body>
+</html>
